@@ -2,29 +2,31 @@
 
 include hi3518e.mk
 
+PWD        := $(shell pwd)
 
-# target source
-#SRC  := $(wildcard *.c) 
-#OBJ  := $(SRC:%.c=%.o)
+BIN_DIR		:= $(PWD)/bin
 
-#TARGET := $(OBJ:%.o=%)
-#.PHONY : clean all
-
-#all: $(TARGET)
+LIB_TARGET	:= $(BIN_DIR)/libhi3518e_avio.so
+LIB_NAME	:= -lhi3518e_avio
+LIB_SRC		:= $(PWD)/src
+INC_DIR		:= -I$(PWD)/include
 
 
-#$(TARGET):%:%.o
-#	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS_FLAGS) $(LIBS_LD_FLAGS)
+EXE_TARGET  := $(BIN_DIR)/hi3518e
+EXE_SRC		:= $(PWD)/main/hi_main.c
 
+PHONY := all
+all: lib exe
+
+PHONY += lib
+lib:
+	$(CC) -fPIC -shared $(CFLAGS) $(INC_DIR) -o $(LIB_TARGET) $(LIB_SRC)/*.c $(LIBS_FLAGS) $(LIBS_LD_FLAGS)
 	
-TARGET  = hi3518e
-
-OBJ = $(patsubst %.c, %.o, $(wildcard *.c))
-
-
-all:$(OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $(TARGET) *.o $(LIBS_FLAGS) $(LIBS_LD_FLAGS)
+	
+PHONY += exe
+exe:	
+	$(CC) -o $(EXE_TARGET) $(EXE_SRC) -I$(LIB_SRC) -L$(BIN_DIR) $(LIB_NAME) $(LIBS_FLAGS) $(LIBS_LD_FLAGS)
 	
 clean:
-	@rm -f $(TARGET)
-	@rm -f $(OBJ)
+	@rm -rf $(BIN_DIR)/*
+	@rm -rf $(LIB_SRC)/*.o
