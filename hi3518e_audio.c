@@ -5,6 +5,7 @@
 	> Created Time: 
  ************************************************************************/
 #include "hi3518e_audio.h"
+#include "hi3518e_debug.h"
 
 #define DEV_AUDIO     "/dev/acodec"
 
@@ -12,22 +13,22 @@
 
 
 //默认使用内部HI_ACODEC_TYPE_INNER
-int HI_AudConfigAcodec(AIO_ATTR_S *pstAioAttr)
+int HI_AUDIO_ConfigAcodec(AIO_ATTR_S *pstAioAttr)
 {
-    int ret = 0, fd;
+    int iRet = 0, fd;
 	int iAcodecInputVol = 0;
 	ACODEC_FS_E i2s_fs_sel = 0;
 	ACODEC_MIXER_E input_mode = 0;
     fd = open(DEV_AUDIO, O_RDWR);
     if (fd < 0)
     {
-        printf("%s: can't open Acodec,%s\n", __FUNCTION__, DEV_AUDIO);
+        HIAV_LOG(LOG_ERROR, "%s: can't open Acodec,%s.", __FUNCTION__, DEV_AUDIO);
         return -1;
     }
 	
     if(ioctl(fd, ACODEC_SOFT_RESET_CTRL))
     {
-    	printf("Reset audio codec error\n");
+    	HIAV_LOG(LOG_ERROR, "Reset audio codec error.");
     }
 
 	switch (pstAioAttr->enSamplerate)
@@ -77,23 +78,23 @@ int HI_AudConfigAcodec(AIO_ATTR_S *pstAioAttr)
 			break;
 	
 		default:
-			printf("%s: not support enSample:%d\n", __FUNCTION__, pstAioAttr->enSamplerate);
-        	ret = -1;
+			HIAV_LOG(LOG_ERROR, "%s: not support enSample:%d.", __FUNCTION__, pstAioAttr->enSamplerate);
+        	iRet = -1;
 			break;
 	}    
 
     if (ioctl(fd, ACODEC_SET_I2S1_FS, &i2s_fs_sel)) 
     {
-        printf("%s: set acodec sample rate failed\n", __FUNCTION__);
-        ret = -1;
+        HIAV_LOG(LOG_ERROR, "%s: set acodec sample rate failed.", __FUNCTION__);
+        iRet = -1;
     }
 
     //select IN or IN_Difference
     input_mode = ACODEC_MIXER_IN;
     if (ioctl(fd, ACODEC_SET_MIXER_MIC, &input_mode)) 
     {
-        printf("%s: select acodec input_mode failed\n", __FUNCTION__);
-        ret = -1;
+        HIAV_LOG(LOG_ERROR, "%s: select acodec input_mode failed.", __FUNCTION__);
+        iRet = -1;
     }
     
     if (0) /* should be 1 when micin */
@@ -101,49 +102,49 @@ int HI_AudConfigAcodec(AIO_ATTR_S *pstAioAttr)
         iAcodecInputVol = 30;
         if (ioctl(fd, ACODEC_SET_INPUT_VOL, &iAcodecInputVol))
         {
-            printf("%s: set acodec micin volume failed\n", __FUNCTION__);
+            HIAV_LOG(LOG_ERROR, "%s: set acodec micin volume failed.", __FUNCTION__);
             return -1;
         }
     }
     
     close(fd);
-    return ret;
+    return iRet;
 }
 
 //
-int HI_AudStartAi(AIO_ATTR_S* pstAioAttr, HI_VOID* pstAiVqeAttr)
+int HI_AUDIO_StartAi(AIO_ATTR_S* pstAioAttr, HI_VOID* pstAiVqeAttr)
 {
-    int ret;
+    int iRet;
 	//只有一个音频设备，默认音频号：0
-    ret = HI_MPI_AI_SetPubAttr(0, pstAioAttr);
-    if (ret)
+    iRet = HI_MPI_AI_SetPubAttr(0, pstAioAttr);
+    if (iRet)
     {
-        printf("%s: HI_MPI_AI_SetPubAttr(%d) failed with %#x\n", __FUNCTION__, 0, ret);
-        return ret;
+        HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_SetPubAttr(%d) failed with %#x.", __FUNCTION__, 0, iRet);
+        return iRet;
     }
 	
-    ret = HI_MPI_AI_Enable(0);
-	if (ret)
+    iRet = HI_MPI_AI_Enable(0);
+	if (iRet)
     {
-        printf("%s: HI_MPI_AI_Enable(%d) failed with %#x\n", __FUNCTION__, 0, ret);
-        return ret;
+        HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_Enable(%d) failed with %#x.", __FUNCTION__, 0, iRet);
+        return iRet;
     }   
 	
 
-	ret = HI_MPI_AI_EnableChn(0, 0);
-	if (ret)
+	iRet = HI_MPI_AI_EnableChn(0, 0);
+	if (iRet)
 	{
-		printf("%s: HI_MPI_AI_EnableChn(%d,%d) failed with %#x\n", __FUNCTION__, 0, 0, ret);
-		return ret;
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_EnableChn(%d,%d) failed with %#x.", __FUNCTION__, 0, 0, iRet);
+		return iRet;
 	}
 #if 0	//重采样是否支持，默认关闭
 	if (HI_TRUE == bResampleEn)
 	{
-		ret = HI_MPI_AI_EnableReSmp(0, 0, enOutSampleRate);
-		if (ret)
+		iRet = HI_MPI_AI_EnableReSmp(0, 0, enOutSampleRate);
+		if (iRet)
 		{
-			printf("%s: HI_MPI_AI_EnableReSmp(%d,%d) failed with %#x\n", __FUNCTION__, 0, 0, ret);
-			return ret;
+			HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_EnableReSmp(%d,%d) failed with %#x.", __FUNCTION__, 0, 0, iRet);
+			return iRet;
 		}
 	}
 #endif
@@ -151,19 +152,19 @@ int HI_AudStartAi(AIO_ATTR_S* pstAioAttr, HI_VOID* pstAiVqeAttr)
 	{
 		HI_BOOL bAiVqe = HI_TRUE;
 
-		ret = HI_MPI_AI_SetVqeAttr(0, 0, 0, 0, (AI_VQE_CONFIG_S *)pstAiVqeAttr);
+		iRet = HI_MPI_AI_SetVqeAttr(0, 0, 0, 0, (AI_VQE_CONFIG_S *)pstAiVqeAttr);
 
-		if (ret)
+		if (iRet)
 		{
-			printf("%s: SetAiVqe%d(%d,%d) failed with %#x\n", __FUNCTION__, 1, 0, 0, ret);
-			return ret;
+			HIAV_LOG(LOG_ERROR, "%s: SetAiVqe%d(%d,%d) failed with %#x.", __FUNCTION__, 1, 0, 0, iRet);
+			return iRet;
 		}
 
-		ret = HI_MPI_AI_EnableVqe(0, 0);
-		if (ret)
+		iRet = HI_MPI_AI_EnableVqe(0, 0);
+		if (iRet)
 		{
-			printf("%s: HI_MPI_AI_EnableVqe(%d,%d) failed with %#x\n", __FUNCTION__, 0, 0, ret);
-			return ret;
+			HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_EnableVqe(%d,%d) failed with %#x.", __FUNCTION__, 0, 0, iRet);
+			return iRet;
 		}
 
     }
@@ -171,57 +172,57 @@ int HI_AudStartAi(AIO_ATTR_S* pstAioAttr, HI_VOID* pstAiVqeAttr)
     return 0;
 }
 
-int HI_AudStartAo(AIO_ATTR_S* pstAioAttr , HI_VOID* pstAoVqeAttr)
+int HI_AUDIO_StartAo(AIO_ATTR_S* pstAioAttr , HI_VOID* pstAoVqeAttr)
 {
 	//只有一个音频设备，默认音频号：0
-    int ret;
+    int iRet;
 
-    ret = HI_MPI_AO_SetPubAttr(0, pstAioAttr);
-    if(0 != ret)
+    iRet = HI_MPI_AO_SetPubAttr(0, pstAioAttr);
+    if(0 != iRet)
     {
-        printf("%s: HI_MPI_AO_SetPubAttr(%d) failed with %#x!\n", __FUNCTION__, \
-               0,ret);
+        HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_SetPubAttr(%d) failed with %#x!", __FUNCTION__, \
+               0,iRet);
         return -1;
     }
     
-    ret = HI_MPI_AO_Enable(0);
-    if(0 != ret)
+    iRet = HI_MPI_AO_Enable(0);
+    if(0 != iRet)
     {
-        printf("%s: HI_MPI_AO_Enable(%d) failed with %#x!\n", __FUNCTION__, 0, ret);
+        HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_Enable(%d) failed with %#x!", __FUNCTION__, 0, iRet);
         return -1;
     }
 
-	ret = HI_MPI_AO_EnableChn(0, 0);
-	if (0 != ret)
+	iRet = HI_MPI_AO_EnableChn(0, 0);
+	if (0 != iRet)
 	{
-		printf("%s: HI_MPI_AO_EnableChn(%d) failed with %#x!\n", __FUNCTION__, 0, ret);
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_EnableChn(%d) failed with %#x!", __FUNCTION__, 0, iRet);
 		return -1;
 	}
 #if 0	//重采样是否支持，默认关闭
-	ret = HI_MPI_AO_DisableReSmp(0, 0);
-	ret |= HI_MPI_AO_EnableReSmp(0, 0, enInSampleRate);
-	if (0 != ret)
+	iRet = HI_MPI_AO_DisableReSmp(0, 0);
+	iRet |= HI_MPI_AO_EnableReSmp(0, 0, enInSampleRate);
+	if (0 != iRet)
 	{
-		printf("%s: HI_MPI_AO_EnableReSmp(%d,%d) failed with %#x!\n", __FUNCTION__, 0, 0, ret);
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_EnableReSmp(%d,%d) failed with %#x!", __FUNCTION__, 0, 0, iRet);
 		return -1;
 	}
 #endif	
 
 	if (NULL != pstAoVqeAttr)
 	{
-		ret = HI_MPI_AO_SetVqeAttr(0, 0, (AO_VQE_CONFIG_S *)pstAoVqeAttr);
+		iRet = HI_MPI_AO_SetVqeAttr(0, 0, (AO_VQE_CONFIG_S *)pstAoVqeAttr);
 
-		if (ret)
+		if (iRet)
 		{
-			printf("%s: SetAoVqe%d(%d,%d) failed with %#x\n", __FUNCTION__, 1, 0, 0, ret);
-			return ret;
+			HIAV_LOG(LOG_ERROR, "%s: SetAoVqe%d(%d,%d) failed with %#x.", __FUNCTION__, 1, 0, 0, iRet);
+			return iRet;
 		}
 
-		ret = HI_MPI_AO_EnableVqe(0, 0);
-		if (ret)
+		iRet = HI_MPI_AO_EnableVqe(0, 0);
+		if (iRet)
 		{
-			printf("%s: HI_MPI_AI_EnableVqe(%d,%d) failed with %#x\n", __FUNCTION__, 0, 0, ret);
-			return ret;
+			HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_EnableVqe(%d,%d) failed with %#x.", __FUNCTION__, 0, 0, iRet);
+			return iRet;
 		}
 
 	}
@@ -230,94 +231,94 @@ int HI_AudStartAo(AIO_ATTR_S* pstAioAttr , HI_VOID* pstAoVqeAttr)
 }
 
 //音量范围 (-12, 6)
-int HI_AudSetVolume(int volume)
+int HI_AUDIO_SetVolume(int volume)
 {
-	int ret;
-	ret = HI_MPI_AO_SetVolume(0, volume);
-	if(0 != ret)
+	int iRet;
+	iRet = HI_MPI_AO_SetVolume(0, volume);
+	if(0 != iRet)
 	{
-		printf("%s: HI_MPI_AO_SetVolume(%d), failed with %#x!\n", __FUNCTION__, 0, ret);
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_SetVolume(%d), failed with %#x!", __FUNCTION__, 0, iRet);
 	}
 	
-	return ret;
+	return iRet;
 }
 
-int HI_AudStopAi(HI_VOID* pstAiVqeAttr)
+int HI_AUDIO_StopAi(HI_VOID* pstAiVqeAttr)
 {
-    int ret;
+    int iRet;
     
 #if 0
-	ret = HI_MPI_AI_DisableReSmp(0, 0);
-	if(0 != ret)
+	iRet = HI_MPI_AI_DisableReSmp(0, 0);
+	if(0 != iRet)
 	{
-		printf("[Func]:%s [Line]:%d [Info]:%s\n", __FUNCTION__, __LINE__, "failed");
-		return ret;
+		HIAV_LOG(LOG_ERROR, "[Func]:%s [Line]:%d [Info]:%s.", __FUNCTION__, __LINE__, "failed");
+		return iRet;
 	}
 #endif
 	if (pstAiVqeAttr)
 	{
-		ret = HI_MPI_AI_DisableVqe(0, 0);
-		if(0 != ret)
+		iRet = HI_MPI_AI_DisableVqe(0, 0);
+		if(0 != iRet)
 		{
-			printf("[Func]:%s [Line]:%d [Info]:%s\n", __FUNCTION__, __LINE__, "failed");
-			return ret;
+			HIAV_LOG(LOG_ERROR, "[Func]:%s [Line]:%d [Info]:%s.", __FUNCTION__, __LINE__, "failed");
+			return iRet;
 		}
 	}
         
-	ret = HI_MPI_AI_DisableChn(0, 0);
-	if(0 != ret)
+	iRet = HI_MPI_AI_DisableChn(0, 0);
+	if(0 != iRet)
 	{
-		printf("[Func]:%s [Line]:%d [Info]:%s\n", __FUNCTION__, __LINE__, "failed");
-		return ret;
+		HIAV_LOG(LOG_ERROR, "[Func]:%s [Line]:%d [Info]:%s.", __FUNCTION__, __LINE__, "failed");
+		return iRet;
 	}
 
     
-    ret = HI_MPI_AI_Disable(0);
-    if(0 != ret)
+    iRet = HI_MPI_AI_Disable(0);
+    if(0 != iRet)
     {
-        printf("[Func]:%s [Line]:%d [Info]:%s\n", __FUNCTION__, __LINE__, "failed");
-        return ret;
+        HIAV_LOG(LOG_ERROR, "[Func]:%s [Line]:%d [Info]:%s.", __FUNCTION__, __LINE__, "failed");
+        return iRet;
     }
     
     return 0;
 }
 
-int HI_AudStopAo(HI_VOID* pstAoVqeAttr)
+int HI_AUDIO_StopAo(HI_VOID* pstAoVqeAttr)
 {
 
-    int ret;
+    int iRet;
 
 #if 0
-	ret = HI_MPI_AO_DisableReSmp(0, 0);
-	if (0 != ret)
+	iRet = HI_MPI_AO_DisableReSmp(0, 0);
+	if (0 != iRet)
 	{
-		printf("%s: HI_MPI_AO_DisableReSmp failed with %#x!\n", __FUNCTION__, ret);
-		return ret;
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_DisableReSmp failed with %#x!", __FUNCTION__, iRet);
+		return iRet;
 	}
 #endif	
 
 	if (pstAoVqeAttr)
 	{
-		ret = HI_MPI_AO_DisableVqe(0, 0);
-		if (0 != ret)
+		iRet = HI_MPI_AO_DisableVqe(0, 0);
+		if (0 != iRet)
 		{
-			printf("[Func]:%s [Line]:%d [Info]:%s\n", __FUNCTION__, __LINE__, "failed");
-			return ret;
+			HIAV_LOG(LOG_ERROR, "[Func]:%s [Line]:%d [Info]:%s.", __FUNCTION__, __LINE__, "failed");
+			return iRet;
 		}
 	}
-	ret = HI_MPI_AO_DisableChn(0, 0);
-	if (0 != ret)
+	iRet = HI_MPI_AO_DisableChn(0, 0);
+	if (0 != iRet)
 	{
-		printf("%s: HI_MPI_AO_DisableChn failed with %#x!\n", __FUNCTION__, ret);
-		return ret;
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_DisableChn failed with %#x!", __FUNCTION__, iRet);
+		return iRet;
 	}
 
 	
-    ret = HI_MPI_AO_Disable(0);
-    if (0 != ret)
+    iRet = HI_MPI_AO_Disable(0);
+    if (0 != iRet)
     {
-        printf("%s: HI_MPI_AO_Disable failed with %#x!\n", __FUNCTION__, ret);
-        return ret;
+        HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_Disable failed with %#x!", __FUNCTION__, iRet);
+        return iRet;
     }
 
     return 0;
@@ -325,9 +326,9 @@ int HI_AudStopAo(HI_VOID* pstAoVqeAttr)
 
 //编码大小 默认320
 //支持g711a g711u g725 
-int HI_AudStartVenc(PAYLOAD_TYPE_E enType)
+int HI_AUDIO_StartVenc(PAYLOAD_TYPE_E enType)
 {
-    int ret;
+    int iRet;
     AENC_CHN_ATTR_S stAencAttr;
     AENC_ATTR_ADPCM_S stAdpcmAenc;
     AENC_ATTR_G711_S stAencG711;
@@ -360,26 +361,26 @@ int HI_AudStartVenc(PAYLOAD_TYPE_E enType)
     }
     else
     {
-        printf("%s: invalid aenc payload type:%d\n", __FUNCTION__, stAencAttr.enType);
+        HIAV_LOG(LOG_ERROR, "%s: invalid aenc payload type:%d.", __FUNCTION__, stAencAttr.enType);
         return -1;
     }    
 	/* create aenc chn*/
-	ret = HI_MPI_AENC_CreateChn(0, &stAencAttr);
-	if (0 != ret)
+	iRet = HI_MPI_AENC_CreateChn(0, &stAencAttr);
+	if (0 != iRet)
 	{
-		printf("%s: HI_MPI_AENC_CreateChn(%d) failed with %#x!\n", __FUNCTION__, 0, ret);
-		return ret;
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AENC_CreateChn(%d) failed with %#x!", __FUNCTION__, 0, iRet);
+		return iRet;
 	}        
 
     return 0;
 }
 
-int HI_AudStopVenc(void)
+int HI_AUDIO_StopVenc(void)
 {
     return HI_MPI_AENC_DestroyChn(0);
 }
 
-int HI_AudViBindVo(void)
+int HI_AUDIO_ViBindVo(void)
 {
     MPP_CHN_S stSrcChn,stDestChn;
 
@@ -392,7 +393,7 @@ int HI_AudViBindVo(void)
     return HI_MPI_SYS_Bind(&stSrcChn, &stDestChn);	
 }
 
-int HI_AudViUnbindVo(void)
+int HI_AUDIO_ViUnBindVo(void)
 {
     MPP_CHN_S stSrcChn,stDestChn;
 

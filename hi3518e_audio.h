@@ -34,17 +34,17 @@
 
 #define AUDIO_PT_NUM_SIZE	(160)
 
-int HI_AudConfigAcodec(AIO_ATTR_S *pstAioAttr);
-int HI_AudStartAi(AIO_ATTR_S* pstAioAttr, HI_VOID* pstAiVqeAttr);
-int HI_AudStartAo(AIO_ATTR_S* pstAioAttr , HI_VOID* pstAoVqeAttr);
-int HI_AudSetVolume(int volume);
-int HI_AudStopAi(HI_VOID* pstAiVqeAttr);
-int HI_AudStopAo(HI_VOID* pstAoVqeAttr);
+int HI_AUDIO_ConfigAcodec(AIO_ATTR_S *pstAioAttr);
+int HI_AUDIO_StartAi(AIO_ATTR_S* pstAioAttr, HI_VOID* pstAiVqeAttr);
+int HI_AUDIO_StartAo(AIO_ATTR_S* pstAioAttr , HI_VOID* pstAoVqeAttr);
+int HI_AUDIO_SetVolume(int volume);
+int HI_AUDIO_StopAi(HI_VOID* pstAiVqeAttr);
+int HI_AUDIO_StopAo(HI_VOID* pstAoVqeAttr);
 
-int HI_AudStartVenc(PAYLOAD_TYPE_E enType);
-int HI_AudStopVenc(void);
-int HI_AudViBindVo(void);
-int HI_AudViUnbindVo(void);
+int HI_AUDIO_StartVenc(PAYLOAD_TYPE_E enType);
+int HI_AUDIO_StopVenc(void);
+int HI_AUDIO_ViBindVo(void);
+int HI_AUDIO_ViUnBindVo(void);
 
 
 

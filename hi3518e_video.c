@@ -6,6 +6,7 @@
  ************************************************************************/
 #include "hi3518e_video.h"
 #include "hi3518e_device.h"
+#include "hi3518e_debug.h"
 
 VI_DEV_ATTR_S DEV_ATTR_BT656D1_1MUX =
 {
@@ -68,7 +69,7 @@ static int HI_VidViMode2Param(SAMPLE_VI_MODE_E enViMode, SAMPLE_VI_PARAM_S *pstV
 
 static int videoStartDev(VI_DEV ViDev, SAMPLE_VI_MODE_E enViMode)
 {
-    int s32Ret;
+    int iRet;
     int s32IspDev = 0;
     ISP_WDR_MODE_S stWdrMode;
     VI_DEV_ATTR_S  stViDevAttr;
@@ -78,20 +79,20 @@ static int videoStartDev(VI_DEV ViDev, SAMPLE_VI_MODE_E enViMode)
 	//注意：这里是直接写死的
 	memcpy(&stViDevAttr,&DEV_ATTR_BT656D1_1MUX,sizeof(stViDevAttr));
 
-    s32Ret = HI_MPI_VI_SetDevAttr(ViDev, &stViDevAttr);
-    if (s32Ret != 0)
+    iRet = HI_MPI_VI_SetDevAttr(ViDev, &stViDevAttr);
+    if (iRet != 0)
     {
-        printf("HI_MPI_VI_SetDevAttr failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VI_SetDevAttr failed with %#x!", iRet);
         return -1;
     }
 
     if ( (SAMPLE_VI_MODE_BT1120_1080P != enViMode)
 		&&(SAMPLE_VI_MODE_BT1120_720P != enViMode) )
 	{
-	    s32Ret = HI_MPI_ISP_GetWDRMode(s32IspDev, &stWdrMode);
-	    if (s32Ret != 0)
+	    iRet = HI_MPI_ISP_GetWDRMode(s32IspDev, &stWdrMode);
+	    if (iRet != 0)
 	    {
-	        printf("HI_MPI_ISP_GetWDRMode failed with %#x!\n", s32Ret);
+	        HIAV_LOG(LOG_ERROR, "HI_MPI_ISP_GetWDRMode failed with %#x!", iRet);
 	        return -1;
 	    }
 
@@ -99,18 +100,18 @@ static int videoStartDev(VI_DEV ViDev, SAMPLE_VI_MODE_E enViMode)
         stWdrAttr.enWDRMode = stWdrMode.enWDRMode;
         stWdrAttr.bCompress = HI_FALSE;
 
-        s32Ret = HI_MPI_VI_SetWDRAttr(ViDev, &stWdrAttr);
-        if (s32Ret)
+        iRet = HI_MPI_VI_SetWDRAttr(ViDev, &stWdrAttr);
+        if (iRet)
         {
-            printf("HI_MPI_VI_SetWDRAttr failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "HI_MPI_VI_SetWDRAttr failed with %#x!.", iRet);
             return -1;
         }
 	}
     
-    s32Ret = HI_MPI_VI_EnableDev(ViDev);
-    if (s32Ret != 0)
+    iRet = HI_MPI_VI_EnableDev(ViDev);
+    if (iRet != 0)
     {
-        printf("HI_MPI_VI_EnableDev failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VI_EnableDev failed with %#x!.", iRet);
         return -1;
     }
 
@@ -126,7 +127,7 @@ static int videoStartMIPI_BT1120(SAMPLE_VI_MODE_E enViMode)
 	fd = open("/dev/hi_mipi", O_RDWR);
 	if (fd < 0)
 	{
-	   printf("warning: open hi_mipi dev failed\n");
+	   HIAV_LOG(LOG_ERROR, "warning: open hi_mipi dev failed.");
 	   return -1;
 	}
 
@@ -142,14 +143,14 @@ static int videoStartMIPI_BT1120(SAMPLE_VI_MODE_E enViMode)
 
     if (NULL == pstcomboDevAttr)
     {
-        printf("Func %s() Line[%d], unsupported enViMode: %d\n", __FUNCTION__, __LINE__, enViMode);
+        HIAV_LOG(LOG_ERROR, "Func %s() Line[%d], unsupported enViMode: %d.", __FUNCTION__, __LINE__, enViMode);
         close(fd);
         return -1;   
     }
 	
 	if (ioctl(fd, HI_MIPI_SET_DEV_ATTR, pstcomboDevAttr))
 	{
-		printf("set mipi attr failed\n");
+		HIAV_LOG(LOG_ERROR, "set mipi attr failed.");
 		close(fd);
 		return -1;
 	}
@@ -159,7 +160,7 @@ static int videoStartMIPI_BT1120(SAMPLE_VI_MODE_E enViMode)
 
 static int videoStartChn(VI_CHN ViChn, RECT_S *pstCapRect, SIZE_S *pstTarSize, SAMPLE_VI_CONFIG_S* pstViConfig)
 {
-    int s32Ret;
+    int iRet;
     VI_CHN_ATTR_S stChnAttr;
     ROTATE_E enRotate = ROTATE_NONE;
     SAMPLE_VI_CHN_SET_E enViChnSet = VI_CHN_SET_NORMAL;
@@ -204,27 +205,27 @@ static int videoStartChn(VI_CHN ViChn, RECT_S *pstCapRect, SIZE_S *pstTarSize, S
     stChnAttr.s32DstFrameRate = -1;
     stChnAttr.enCompressMode = COMPRESS_MODE_NONE;
 
-    s32Ret = HI_MPI_VI_SetChnAttr(ViChn, &stChnAttr);
-    if (s32Ret != 0)
+    iRet = HI_MPI_VI_SetChnAttr(ViChn, &stChnAttr);
+    if (iRet != 0)
     {
-        printf("failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "failed with %#x!.", iRet);
         return -1;
     }
 
     if(ROTATE_NONE != enRotate)
     {
-        s32Ret = HI_MPI_VI_SetRotate(ViChn, enRotate);
-        if (s32Ret != 0)
+        iRet = HI_MPI_VI_SetRotate(ViChn, enRotate);
+        if (iRet != 0)
         {
-            printf("HI_MPI_VI_SetRotate failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "HI_MPI_VI_SetRotate failed with %#x!.", iRet);
             return -1;
         }
     }
     
-    s32Ret = HI_MPI_VI_EnableChn(ViChn);
-    if (s32Ret != 0)
+    iRet = HI_MPI_VI_EnableChn(ViChn);
+    if (iRet != 0)
     {
-        printf("failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "failed with %#x!.", iRet);
         return -1;
     }
 
@@ -234,7 +235,7 @@ static int videoStartChn(VI_CHN ViChn, RECT_S *pstCapRect, SIZE_S *pstTarSize, S
 
 static int videoStartBT656(SAMPLE_VI_CONFIG_S* pstViConfig)
 {
-    int s32Ret = 0;
+    int iRet = 0;
     VI_DEV ViDev = 0;
     VI_CHN ViChn = 0;
 
@@ -244,23 +245,23 @@ static int videoStartBT656(SAMPLE_VI_CONFIG_S* pstViConfig)
 
     if(!pstViConfig)
     {
-        printf("%s: null ptr\n", __FUNCTION__);
+        HIAV_LOG(LOG_ERROR, "%s: null ptr.", __FUNCTION__);
         return -1;
     }
     enViMode = pstViConfig->enViMode;
 
-	s32Ret = videoStartMIPI_BT1120(enViMode);   
-    if (0 != s32Ret)
+	iRet = videoStartMIPI_BT1120(enViMode);   
+    if (0 != iRet)
     {
-        printf("%s: MIPI init failed!\n", __FUNCTION__);
+        HIAV_LOG(LOG_ERROR, "%s: MIPI init failed!.", __FUNCTION__);
         return -1;
     }     
 	
 
-	s32Ret = videoStartDev(ViDev, enViMode);
-	if (0 != s32Ret)
+	iRet = videoStartDev(ViDev, enViMode);
+	if (0 != iRet)
 	{
-		printf("%s: start vi dev[%d] failed!\n", __FUNCTION__, 0);
+		HIAV_LOG(LOG_ERROR, "%s: start vi dev[%d] failed!.", __FUNCTION__, 0);
 		return -1;
 	}
 
@@ -275,15 +276,15 @@ static int videoStartBT656(SAMPLE_VI_CONFIG_S* pstViConfig)
 	stTargetSize.u32Width = stCapRect.u32Width;
 	stTargetSize.u32Height = stCapRect.u32Height;
 
-	s32Ret = videoStartChn(ViChn, &stCapRect, &stTargetSize, pstViConfig);
-	if (0 != s32Ret)
+	iRet = videoStartChn(ViChn, &stCapRect, &stTargetSize, pstViConfig);
+	if (0 != iRet)
 	{
-		HI_DevISPStop();
+		HI_DEVICE_ISPStop();
 		return -1;
 	}
 
 
-    return s32Ret;
+    return iRet;
 }
 
 static int videoStopBT656(SAMPLE_VI_MODE_E enViMode)
@@ -291,14 +292,14 @@ static int videoStopBT656(SAMPLE_VI_MODE_E enViMode)
     VI_DEV ViDev;
     VI_CHN ViChn;
     int i;
-    int s32Ret;
+    int iRet;
     SAMPLE_VI_PARAM_S stViParam;
 
     /*** get parameter from Sample_Vi_Mode ***/
-    s32Ret = HI_VidViMode2Param(enViMode, &stViParam);
-    if (0 !=s32Ret)
+    iRet = HI_VidViMode2Param(enViMode, &stViParam);
+    if (0 !=iRet)
     {
-        printf("HI_VidViMode2Param failed!\n");
+        HIAV_LOG(LOG_ERROR, "HI_VidViMode2Param failed!.");
         return -1;
     }
 
@@ -307,10 +308,10 @@ static int videoStopBT656(SAMPLE_VI_MODE_E enViMode)
     {
         /* Stop vi phy-chn */
         ViChn = i * stViParam.s32ViChnInterval;
-        s32Ret = HI_MPI_VI_DisableChn(ViChn);
-        if (0 != s32Ret)
+        iRet = HI_MPI_VI_DisableChn(ViChn);
+        if (0 != iRet)
         {
-            printf("SAMPLE_COMM_VI_StopChn failed with %#x\n",s32Ret);
+            HIAV_LOG(LOG_ERROR, "SAMPLE_COMM_VI_StopChn failed with %#x.",iRet);
             return -1;
         }
     }
@@ -319,10 +320,10 @@ static int videoStopBT656(SAMPLE_VI_MODE_E enViMode)
     for(i=0; i<stViParam.s32ViDevCnt; i++)
     {
         ViDev = i * stViParam.s32ViDevInterval;
-        s32Ret = HI_MPI_VI_DisableDev(ViDev);
-        if (0 != s32Ret)
+        iRet = HI_MPI_VI_DisableDev(ViDev);
+        if (0 != iRet)
         {
-            printf("SAMPLE_COMM_VI_StopDev failed with %#x\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "SAMPLE_COMM_VI_StopDev failed with %#x.", iRet);
             return -1;
         }
     }
@@ -352,57 +353,57 @@ static HI_BOOL IsSensorInput(SAMPLE_VI_MODE_E enViMode)
 //未使用
 static int videoStartIspAndVi(SAMPLE_VI_CONFIG_S* pstViConfig)
 {
-    int s32Ret = 0;
+    int iRet = 0;
 
-    return s32Ret;
+    return iRet;
 }
 
 static int videoStopIsp(SAMPLE_VI_CONFIG_S* pstViConfig)
 {
     VI_DEV ViDev = 0;
     VI_CHN ViChn = 0;
-    int s32Ret;
+    int iRet;
 
     if(!pstViConfig)
     {
-        printf("%s: null ptr\n", __FUNCTION__);
+        HIAV_LOG(LOG_ERROR, "%s: null ptr.", __FUNCTION__);
         return -1;
     }
     
     /*** Stop VI Chn ***/
 
 	/* Stop vi phy-chn */
-	s32Ret = HI_MPI_VI_DisableChn(ViChn);
-	if (0 != s32Ret)
+	iRet = HI_MPI_VI_DisableChn(ViChn);
+	if (0 != iRet)
 	{
-		printf("HI_MPI_VI_DisableChn failed with %#x\n",s32Ret);
+		HIAV_LOG(LOG_ERROR, "HI_MPI_VI_DisableChn failed with %#x.",iRet);
 		return -1;
 	}
 
 
     /*** Stop VI Dev ***/
 
-	s32Ret = HI_MPI_VI_DisableDev(ViDev);
-	if (0 != s32Ret)
+	iRet = HI_MPI_VI_DisableDev(ViDev);
+	if (0 != iRet)
 	{
-		printf("HI_MPI_VI_DisableDev failed with %#x\n", s32Ret);
+		HIAV_LOG(LOG_ERROR, "HI_MPI_VI_DisableDev failed with %#x.", iRet);
 		return -1;
 	}
 
 
-    HI_DevISPStop();
+    HI_DEVICE_ISPStop();
     return 0;
 }
 
 
-int HI_VidStartVi(SAMPLE_VI_CONFIG_S* pstViConfig)
+int HI_VIDEO_StartVi(SAMPLE_VI_CONFIG_S* pstViConfig)
 {
-    int s32Ret = 0;
+    int iRet = 0;
     SAMPLE_VI_MODE_E enViMode;  
 
     if(!pstViConfig)
     {
-        printf("%s: null ptr\n", __FUNCTION__);
+        HIAV_LOG(LOG_ERROR, "%s: null ptr.", __FUNCTION__);
         return -1;
     }
 	
@@ -410,58 +411,58 @@ int HI_VidStartVi(SAMPLE_VI_CONFIG_S* pstViConfig)
     if(!IsSensorInput(enViMode))
     {
 		//cvbs
-        s32Ret = videoStartBT656(pstViConfig);
+        iRet = videoStartBT656(pstViConfig);
     }
     else
     {
 		//数字摄像头
-        s32Ret = videoStartIspAndVi(pstViConfig);
+        iRet = videoStartIspAndVi(pstViConfig);
     }
 
 
-    return s32Ret; 
+    return iRet; 
 }
 
 
 
-int HI_VidStopVi(SAMPLE_VI_CONFIG_S* pstViConfig)
+int HI_VIDEO_StopVi(SAMPLE_VI_CONFIG_S* pstViConfig)
 {
-    int s32Ret = 0;
+    int iRet = 0;
     SAMPLE_VI_MODE_E enViMode;
 
     if(!pstViConfig)
     {
-        printf("%s: null ptr\n", __FUNCTION__);
+        HIAV_LOG(LOG_ERROR, "%s: null ptr.", __FUNCTION__);
         return -1;
     }
     enViMode = pstViConfig->enViMode;
     
     if(!IsSensorInput(enViMode))
     {
-        s32Ret = videoStopBT656(enViMode);        
+        iRet = videoStopBT656(enViMode);        
     }
     else
     {
-        s32Ret = videoStopIsp(pstViConfig);        
+        iRet = videoStopIsp(pstViConfig);        
     }
     
-    return s32Ret;
+    return iRet;
 }
 
 
-int HI_VidViBindVpss(SAMPLE_VI_MODE_E enViMode)
+int HI_VIDEO_ViBindVpss(SAMPLE_VI_MODE_E enViMode)
 {
-    int j, s32Ret;
+    int j, iRet;
     VPSS_GRP VpssGrp;
     MPP_CHN_S stSrcChn;
     MPP_CHN_S stDestChn;
     SAMPLE_VI_PARAM_S stViParam;
     VI_CHN ViChn;
 
-    s32Ret = HI_VidViMode2Param(enViMode, &stViParam);
-    if (0 !=s32Ret)
+    iRet = HI_VidViMode2Param(enViMode, &stViParam);
+    if (0 !=iRet)
     {
-        printf("HI_VidViMode2Param failed!\n");
+        HIAV_LOG(LOG_ERROR, "HI_VidViMode2Param failed!.");
         return -1;
     }
     
@@ -478,10 +479,10 @@ int HI_VidViBindVpss(SAMPLE_VI_MODE_E enViMode)
         stDestChn.s32DevId = VpssGrp;
         stDestChn.s32ChnId = 0;
     
-        s32Ret = HI_MPI_SYS_Bind(&stSrcChn, &stDestChn);
-        if (s32Ret != 0)
+        iRet = HI_MPI_SYS_Bind(&stSrcChn, &stDestChn);
+        if (iRet != 0)
         {
-            printf("failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "failed with %#x!.", iRet);
             return -1;
         }
         
@@ -491,9 +492,9 @@ int HI_VidViBindVpss(SAMPLE_VI_MODE_E enViMode)
 }
 
 
-int HI_VidViUnBindVpss(SAMPLE_VI_MODE_E enViMode)
+int HI_VIDEO_ViUnBindVpss(SAMPLE_VI_MODE_E enViMode)
 {
-    int i, j, s32Ret;
+    int i, j, iRet;
     VPSS_GRP VpssGrp;
     MPP_CHN_S stSrcChn;
     MPP_CHN_S stDestChn;
@@ -501,10 +502,10 @@ int HI_VidViUnBindVpss(SAMPLE_VI_MODE_E enViMode)
     VI_DEV ViDev;
     VI_CHN ViChn;
 
-    s32Ret = HI_VidViMode2Param(enViMode, &stViParam);
-    if (0 !=s32Ret)
+    iRet = HI_VidViMode2Param(enViMode, &stViParam);
+    if (0 !=iRet)
     {
-        printf("HI_VidViMode2Param failed!\n");
+        HIAV_LOG(LOG_ERROR, "HI_VidViMode2Param failed!.");
         return -1;
     }
     
@@ -525,10 +526,10 @@ int HI_VidViUnBindVpss(SAMPLE_VI_MODE_E enViMode)
             stDestChn.s32DevId = VpssGrp;
             stDestChn.s32ChnId = 0;
         
-            s32Ret = HI_MPI_SYS_UnBind(&stSrcChn, &stDestChn);
-            if (s32Ret != 0)
+            iRet = HI_MPI_SYS_UnBind(&stSrcChn, &stDestChn);
+            if (iRet != 0)
             {
-                printf("failed with %#x!\n", s32Ret);
+                HIAV_LOG(LOG_ERROR, "failed with %#x!.", iRet);
                 return -1;
             }
             
@@ -538,9 +539,9 @@ int HI_VidViUnBindVpss(SAMPLE_VI_MODE_E enViMode)
     return 0;
 }
 
-int HI_VidVencStart(VENC_CHN VencChn, PAYLOAD_TYPE_E enType, VIDEO_NORM_E enNorm, PIC_SIZE_E enSize, SAMPLE_RC_E enRcMode,HI_U32  u32Profile)
+int HI_VIDEO_VencStart(VENC_CHN VencChn, PAYLOAD_TYPE_E enType, VIDEO_NORM_E enNorm, PIC_SIZE_E enSize, SAMPLE_RC_E enRcMode,HI_U32  u32Profile)
 {
-    int s32Ret;
+    int iRet;
     VENC_CHN_ATTR_S stVencChnAttr;
     VENC_ATTR_H264_S stH264Attr;
     VENC_ATTR_H264_CBR_S    stH264Cbr;
@@ -555,10 +556,10 @@ int HI_VidVencStart(VENC_CHN VencChn, PAYLOAD_TYPE_E enType, VIDEO_NORM_E enNorm
     VENC_ATTR_JPEG_S stJpegAttr;
     SIZE_S stPicSize;
 
-    s32Ret = HI_DevSystemGetPicSize(enNorm, enSize, &stPicSize);
-     if (0 != s32Ret)
+    iRet = HI_DEVICE_GetPicSize(enNorm, enSize, &stPicSize);
+     if (0 != iRet)
     {
-        printf("Get picture size failed!\n");
+        HIAV_LOG(LOG_ERROR, "Get picture size failed!.");
         return -1;
     }
 
@@ -765,7 +766,7 @@ int HI_VidVencStart(VENC_CHN VencChn, PAYLOAD_TYPE_E enType, VIDEO_NORM_E enNorm
             }
             else 
             {
-                printf("cann't support other mode in this version!\n");
+                HIAV_LOG(LOG_ERROR, "cann't support other mode in this version!.");
 
                 return -1;
             }
@@ -895,21 +896,20 @@ int HI_VidVencStart(VENC_CHN VencChn, PAYLOAD_TYPE_E enType, VIDEO_NORM_E enNorm
             return HI_ERR_VENC_NOT_SUPPORT;
     }
 
-    s32Ret = HI_MPI_VENC_CreateChn(VencChn, &stVencChnAttr);
-    if (0 != s32Ret)
+    iRet = HI_MPI_VENC_CreateChn(VencChn, &stVencChnAttr);
+    if (0 != iRet)
     {
-        printf("HI_MPI_VENC_CreateChn [%d] faild with %#x!\n",\
-                VencChn, s32Ret);
-        return s32Ret;
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VENC_CreateChn [%d] faild with %#x!.", VencChn, iRet);
+        return iRet;
     }
 
     /******************************************
      step 2:  Start Recv Venc Pictures
     ******************************************/
-    s32Ret = HI_MPI_VENC_StartRecvPic(VencChn);
-    if (0 != s32Ret)
+    iRet = HI_MPI_VENC_StartRecvPic(VencChn);
+    if (0 != iRet)
     {
-        printf("HI_MPI_VENC_StartRecvPic faild with%#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VENC_StartRecvPic faild with%#x!.", iRet);
         return -1;
     }
 
@@ -917,38 +917,36 @@ int HI_VidVencStart(VENC_CHN VencChn, PAYLOAD_TYPE_E enType, VIDEO_NORM_E enNorm
 
 }
 
-int HI_VidVencStop(VENC_CHN VencChn)
+int HI_VIDEO_VencStop(VENC_CHN VencChn)
 {
-    int s32Ret;
+    int iRet;
 
     /******************************************
      step 1:  Stop Recv Pictures
     ******************************************/
-    s32Ret = HI_MPI_VENC_StopRecvPic(VencChn);
-    if (0 != s32Ret)
+    iRet = HI_MPI_VENC_StopRecvPic(VencChn);
+    if (0 != iRet)
     {
-        printf("HI_MPI_VENC_StopRecvPic vechn[%d] failed with %#x!\n",\
-               VencChn, s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VENC_StopRecvPic vechn[%d] failed with %#x!.",VencChn, iRet);
         return -1;
     }
 
     /******************************************
      step 2:  Distroy Venc Channel
     ******************************************/
-    s32Ret = HI_MPI_VENC_DestroyChn(VencChn);
-    if (0 != s32Ret)
+    iRet = HI_MPI_VENC_DestroyChn(VencChn);
+    if (0 != iRet)
     {
-        printf("HI_MPI_VENC_DestroyChn vechn[%d] failed with %#x!\n",\
-               VencChn, s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VENC_DestroyChn vechn[%d] failed with %#x!.",VencChn, iRet);
         return -1;
     }
 
     return 0;
 }
 
-int HI_VidVencBindVpss(VENC_CHN VeChn,VPSS_GRP VpssGrp,VPSS_CHN VpssChn)
+int HI_VIDEO_VencBindVpss(VENC_CHN VeChn,VPSS_GRP VpssGrp,VPSS_CHN VpssChn)
 {
-    int s32Ret = 0;
+    int iRet = 0;
     MPP_CHN_S stSrcChn;
     MPP_CHN_S stDestChn;
 
@@ -960,19 +958,19 @@ int HI_VidVencBindVpss(VENC_CHN VeChn,VPSS_GRP VpssGrp,VPSS_CHN VpssChn)
     stDestChn.s32DevId = 0;
     stDestChn.s32ChnId = VeChn;
 
-    s32Ret = HI_MPI_SYS_Bind(&stSrcChn, &stDestChn);
-    if (s32Ret != 0)
+    iRet = HI_MPI_SYS_Bind(&stSrcChn, &stDestChn);
+    if (iRet != 0)
     {
-        printf("failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "failed with %#x!.", iRet);
         return -1;
     }
 
-    return s32Ret;
+    return iRet;
 }
 
-int HI_VidVencUnBindVpss(VENC_CHN VeChn,VPSS_GRP VpssGrp,VPSS_CHN VpssChn)
+int HI_VIDEO_VencUnBindVpss(VENC_CHN VeChn,VPSS_GRP VpssGrp,VPSS_CHN VpssChn)
 {
-    int s32Ret = 0;
+    int iRet = 0;
     MPP_CHN_S stSrcChn;
     MPP_CHN_S stDestChn;
 
@@ -984,14 +982,14 @@ int HI_VidVencUnBindVpss(VENC_CHN VeChn,VPSS_GRP VpssGrp,VPSS_CHN VpssChn)
     stDestChn.s32DevId = 0;
     stDestChn.s32ChnId = VeChn;
 
-    s32Ret = HI_MPI_SYS_UnBind(&stSrcChn, &stDestChn);
-    if (s32Ret != 0)
+    iRet = HI_MPI_SYS_UnBind(&stSrcChn, &stDestChn);
+    if (iRet != 0)
     {
-        printf("failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "failed with %#x!", iRet);
         return -1;
     }
 
-    return s32Ret;
+    return iRet;
 }
 
 static int vencSaveH264(FILE* fpH264File, VENC_STREAM_S *pstStream)
@@ -1027,25 +1025,25 @@ static int vencSaveH265(FILE* fpH265File, VENC_STREAM_S *pstStream)
 }
 
 
-int HI_VidVencSaveStream(PAYLOAD_TYPE_E enType, FILE *pFd, VENC_STREAM_S *pstStream)
+int HI_VIDEO_VencSaveStream(PAYLOAD_TYPE_E enType, FILE *pFd, VENC_STREAM_S *pstStream)
 {
-    int s32Ret;
+    int iRet;
 
     if (PT_H264 == enType)
     {
-        s32Ret = vencSaveH264(pFd, pstStream);
+        iRet = vencSaveH264(pFd, pstStream);
     }
     else if (PT_MJPEG == enType)
     {
-        //s32Ret = SAMPLE_COMM_VENC_SaveMJpeg(pFd, pstStream);
+        //iRet = SAMPLE_COMM_VENC_SaveMJpeg(pFd, pstStream);
     }
     else if (PT_H265 == enType)
     {
-        s32Ret = vencSaveH265(pFd, pstStream);        
+        iRet = vencSaveH265(pFd, pstStream);        
     }
     else
     {
         return -1;
     }
-    return s32Ret;
+    return iRet;
 }

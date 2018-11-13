@@ -7,26 +7,29 @@
 #include "hi3518e.h"
 #include "hi3518e_audio.h"
 #include "hi3518e_device.h"
+#include "hi3518e_debug.h"
+
+#include "uran.h"
 
 
-#define EPOLL_EVENT_NUM_MAX		(16) 
-
-///////////////////////////////////////////////////////////////////
 VB_CONF_S stVbConf;
 
+void *pHiManger = NULL;
 
-///////////////////////////////////////////////////////////////////
-static int audio_bing_flags = 0;	//bind标识
-pthread_t	thread_id;
+typedef struct _tagAudioInfo
+{
+	T_EventInfo			in_tEvent;
+	unsigned char		m_ucFlags;	//bind flags
+	int					m_iAfd;		//audio fd
+	
+	HI_AUDIO_CBK		pAudioCbk;
+}T_AudioInfo;
 
-static int efd = -1;	//全局epoll,fd
-static int audio_fd = -1;
+T_AudioInfo g_tAudioInfo = {0};
 
-hi_audio_cb audio_cb = NULL;
-
-///////////////////////////////////////////////////////////////////
 typedef struct _tagVideoInfo
 {
+	T_EventInfo		in_tEvent;
 	PIC_SIZE_E		emSize;			//注意要和in_tSize大小对应
 	SAMPLE_RC_E		emRate;
 	PAYLOAD_TYPE_E	emPayload;
@@ -41,55 +44,20 @@ typedef struct _tagVideoInfo
 	
 }T_VideoInfo;
 
-T_VideoInfo g_tVideoInfo;
+T_VideoInfo g_tVideoInfo = {0};
 
 
 
 
-///////////////////////////////////////////////////////////////////
-int uepoll_create(int *_efd)
+/*******************************************************************************
+* Name: 
+* Descriptions:默认参数：8k，16bit，不编码,	flags:1绑定模式
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3518E_AudioEnable(unsigned char _ucFlags)
 {
-	*_efd = -1;
-	*_efd = epoll_create(EPOLL_EVENT_NUM_MAX); 
-	if(*_efd < 0)
-	{
-		return -1;		
-	}	
-
-	return 0;
-}
-
-int uepoll_add(int _efd, int _fd)
-{
-	
-	struct epoll_event ev;
-	ev.data.fd = _fd;
-	ev.events = (EPOLLIN|EPOLLET);
-	
-	if(epoll_ctl(_efd, EPOLL_CTL_ADD, _fd, &ev) == -1)
-	{
-		return -1;
-	}
-	
-	return 0;
-}
-
-int uepoll_del(int _efd, int _fd) 
-{
-	
-	if(epoll_ctl(_efd, EPOLL_CTL_DEL, _fd, NULL) == -1)
-	{
-		return -1;
-	}
-	
-	return 0;
-}
-
-
-/*********************************************************************************/
-//默认参数：8k，16bit，不编码,	flags:1绑定模式
-int hi3518_audio_init(int flags)
-{
+	T_AudioInfo *tAudio = &g_tAudioInfo;
 	int iRet = 0;
 	AIO_ATTR_S stAioAttr;
 	
@@ -104,98 +72,59 @@ int hi3518_audio_init(int flags)
     stAioAttr.u32ClkSel      = 0;
 
 	//1.初始化音频配置
-	iRet |= HI_AudConfigAcodec(&stAioAttr);
+	iRet |= HI_AUDIO_ConfigAcodec(&stAioAttr);
 	
 	//2.使能ai,默认不使用音质增强
-	iRet |= HI_AudStartAi(&stAioAttr, NULL);
+	iRet |= HI_AUDIO_StartAi(&stAioAttr, NULL);
 	
 	//3.使能ao,默认不使用音质增强
-	iRet |= HI_AudStartAo(&stAioAttr, NULL);
+	iRet |= HI_AUDIO_StartAo(&stAioAttr, NULL);
 	
 	//4.设置音量
-	HI_AudSetVolume(6);
-	
-	audio_bing_flags = flags;
-	if (flags)
+	HI_AUDIO_SetVolume(6);
+
+	tAudio->m_ucFlags = _ucFlags;
+	if (_ucFlags)
 	{
 		//绑定模式
-		iRet |= HI_AudViBindVo();
+		iRet |= HI_AUDIO_ViBindVo();
 	}
 	
 	return iRet;
 }
 
-int hi3518_audio_deinit(void)
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3518E_AudioDisable(void)
 {
+	T_AudioInfo *tAudio = &g_tAudioInfo;
 	int iRet = 0;
-	if (audio_bing_flags)
+	if (tAudio->m_ucFlags)
 	{
 		//解除绑定
-		iRet |= HI_AudViUnbindVo();
+		iRet |= HI_AUDIO_ViUnBindVo();
 	}
 	
-	iRet |= HI_AudStopAi(NULL);
-	iRet |= HI_AudStopAo(NULL);
+	iRet |= HI_AUDIO_StopAi(NULL);
+	iRet |= HI_AUDIO_StopAo(NULL);
 
 	return iRet;
 }
 
-//音频采集开始，后台线程
-int HI3515E_AudioSStart(hi_audio_cb p_cb)
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+static int audioInputProcess(void *_pThis)
 {
 	int iRet = 0;
-    AI_CHN_PARAM_S stAiChnPara;
-
-    iRet = HI_MPI_AI_GetChnParam(0, 0, &stAiChnPara);
-    if (0 != iRet)
-    {
-        printf("%s: Get ai chn param failed\n", __FUNCTION__);
-        return -1;
-    }
-
-    stAiChnPara.u32UsrFrmDepth = 30;
-    
-    iRet = HI_MPI_AI_SetChnParam(0, 0, &stAiChnPara);
-    if (0 != iRet)
-    {
-        printf("%s: set ai chn param failed\n", __FUNCTION__);
-        return -1;
-    }
-
-    audio_fd = HI_MPI_AI_GetFd(0, 0);	
-	//将fd加入epoll
-	
-	if (efd != -1)
-	{
-		uepoll_add(efd, audio_fd);
-	}
-	
-
-	audio_cb = p_cb;
-
-	
-	
-	return iRet;
-}
-int HI3515E_AudioSStop(void)
-{
-	int iRet = 0;
-	
-	
-	if (efd != -1)
-	{
-		uepoll_del(efd, audio_fd);
-	}	
-	
-	//关闭相应的音频属性
-	return iRet;
-}
-
-
-static int audioInputProcess()
-{
-	int iRet = 0;
-	
+	T_AudioInfo *tAudio = (T_AudioInfo *)_pThis;
     AUDIO_FRAME_S stFrame = {0};
 	AEC_FRAME_S   stAecFrm = {0};
 	char data[320] = {0};
@@ -206,12 +135,11 @@ static int audioInputProcess()
 		return iRet;
 	}	
 	//回调用户
-	if (audio_cb)
+	if (tAudio->pAudioCbk)
 	{
-		audio_cb(stFrame.pVirAddr[0], stFrame.u32Len);
+		tAudio->pAudioCbk(stFrame.pVirAddr[0], stFrame.u32Len);
 	}
-
-	//printf("------ Len = %d, TimeStamp = %d, Seq = %d, Bitwidth = %d, Soundmode = %d\r\n", \
+	//printf("------ Len = %d, TimeStamp = %d, Seq = %d, Bitwidth = %d, Soundmode = %d.", \
 				stFrame.u32Len, stFrame.u64TimeStamp, stFrame.u32Seq, stFrame.enBitwidth, stFrame.enSoundmode);
 
 	
@@ -220,15 +148,79 @@ static int audioInputProcess()
 	iRet = HI_MPI_AI_ReleaseFrame(0, 0, &stFrame, &stAecFrm);
 	if (0 != iRet )
 	{
-		printf("%s: HI_MPI_AI_ReleaseFrame(%d, %d), failed with %#x!\n", __FUNCTION__, 0, 0, iRet);
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AI_ReleaseFrame(%d, %d), failed with %#x!", __FUNCTION__, 0, 0, iRet);
 		HI3515E_AudioSStop();
 	}	
 	return iRet;
 }
 
+/*******************************************************************************
+* Name: 
+* Descriptions:音频采集开始，后台线程
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3515E_AudioSStart(HI_AUDIO_CBK _pAudio)
+{
+	T_AudioInfo *tAudio = &g_tAudioInfo;
+	int iRet = 0;
+    AI_CHN_PARAM_S stAiChnPara;
 
-//音频播放，单帧播放直接调用,pcm格式
-int hi3518_audio_output(char *p_data, char *file_name)
+    iRet = HI_MPI_AI_GetChnParam(0, 0, &stAiChnPara);
+    if (0 != iRet)
+    {
+        HIAV_LOG(LOG_ERROR, "%s: Get ai chn param failed.", __FUNCTION__);
+        return -1;
+    }
+
+    stAiChnPara.u32UsrFrmDepth = 30;
+    
+    iRet = HI_MPI_AI_SetChnParam(0, 0, &stAiChnPara);
+    if (0 != iRet)
+    {
+        HIAV_LOG(LOG_ERROR, "%s: set ai chn param failed.", __FUNCTION__);
+        return -1;
+    }
+	
+	tAudio->pAudioCbk = _pAudio;
+	tAudio->in_tEvent.m_emType		= EVENT_INLT;
+	tAudio->in_tEvent.m_iEventFD	= HI_MPI_AI_GetFd(0, 0);	
+	tAudio->in_tEvent.m_Handle		= audioInputProcess;
+	
+	iRet = UranRegister(tAudio, pHiManger);	//pHiManger 不能为NULL
+	if (iRet)
+	{
+		HIAV_LOG(LOG_ERROR, "UranRegister error.");
+	}
+	
+	return iRet;
+}
+
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3515E_AudioSStop(void)
+{
+	int iRet = 0;
+	T_AudioInfo *tAudio = &g_tAudioInfo;
+	iRet = UranCancel(tAudio);	
+	if (iRet)
+	{
+		HIAV_LOG(LOG_ERROR, "UranCancel error.");
+	}	
+	return iRet;
+}
+
+/*******************************************************************************
+* Name: 
+* Descriptions:音频播放，单帧播放直接调用,pcm格式
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3515E_AudioPlayer(char *p_data, char *file_name)
 {
 	int iRet = 0;
 
@@ -242,17 +234,19 @@ int hi3518_audio_output(char *p_data, char *file_name)
 	iRet = HI_MPI_AO_SendFrame(0, 0, &stFrame, 1000);
 	if (0 != iRet )
 	{
-		printf("%s: HI_MPI_AO_SendFrame(%d, %d), failed with %#x!\n",__FUNCTION__, 0, 0, iRet);
+		HIAV_LOG(LOG_ERROR, "%s: HI_MPI_AO_SendFrame(%d, %d), failed with %#x!",__FUNCTION__, 0, 0, iRet);
 	}	
 	
 	return iRet;
 }
 
-/*********************************************************************************/
-
-
-
-int HI3515E_VideoInit(void)
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3518E_VideoEnable(void)
 {
 	T_VideoInfo *tVideo = &g_tVideoInfo;
 	int iRet = 0;
@@ -262,7 +256,7 @@ int HI3515E_VideoInit(void)
 	tVideo->emPayload		= PT_H264;
 	tVideo->emNorm			= VIDEO_ENCODING_MODE_PAL;
 	tVideo->m_iProfile		= 2;
-	tVideo->m_iVfd			= -1;
+	//tVideo->m_iVfd			= -1;
 	tVideo->m_ucRunning		= 0;
 	tVideo->pVideoCbk		= NULL;
 	
@@ -274,17 +268,17 @@ int HI3515E_VideoInit(void)
 	/**************************************/
 	SIZE_S stSize;
 	
-    iRet = HI_VidStartVi(&tVideo->in_tViConfig);	
+    iRet = HI_VIDEO_StartVi(&tVideo->in_tViConfig);	
     if (0 != iRet)
     {
-        printf("start vi failed!\n");
+        HIAV_LOG(LOG_ERROR, "start vi failed!");
         goto END_VENC_CLASSIC_1;
     }	
 	
-	iRet = HI_DevSystemGetPicSize(tVideo->emNorm, tVideo->emSize, &stSize);
+	iRet = HI_DEVICE_GetPicSize(tVideo->emNorm, tVideo->emSize, &stSize);
     if (0 != iRet)
     {
-        printf("SAMPLE_COMM_SYS_GetPicSize failed!\n");
+        HIAV_LOG(LOG_ERROR, "SAMPLE_COMM_SYS_GetPicSize failed!");
         goto END_VENC_CLASSIC_1;
     }	
 	
@@ -301,17 +295,17 @@ int HI3515E_VideoInit(void)
 	stVpssGrpAttr.enDieMode = VPSS_DIE_MODE_NODIE;
 	stVpssGrpAttr.enPixFmt = PIXEL_FORMAT_YUV_SEMIPLANAR_420;
 	
-	iRet = HI_DevVpssStartGroup(0, &stVpssGrpAttr);
+	iRet = HI_DEVICE_VpssStartGroup(0, &stVpssGrpAttr);
 	if (0 != iRet)
 	{
-		printf("Start Vpss failed!\n");
+		HIAV_LOG(LOG_ERROR, "Start Vpss failed!");
 		goto END_VENC_CLASSIC_2;
 	}	
 	
-	iRet = HI_VidViBindVpss(tVideo->in_tViConfig.enViMode);
+	iRet = HI_VIDEO_ViBindVpss(tVideo->in_tViConfig.enViMode);
 	if (0 != iRet)
 	{
-		printf("Vi bind Vpss failed!\n");
+		HIAV_LOG(LOG_ERROR, "Vi bind Vpss failed!");
 		goto END_VENC_CLASSIC_3;
 	}	
 	
@@ -324,112 +318,73 @@ int HI3515E_VideoInit(void)
 	memset(&stVpssChnAttr, 0, sizeof(stVpssChnAttr));
 	stVpssChnAttr.s32SrcFrameRate = -1;
 	stVpssChnAttr.s32DstFrameRate = -1;
-	iRet = HI_DevVpssEnableChn(0, 0, &stVpssChnAttr, &stVpssChnMode, HI_NULL);	
+	iRet = HI_DEVICE_VpssEnableChn(0, 0, &stVpssChnAttr, &stVpssChnMode, HI_NULL);	
 	if (0 != iRet)
 	{
-		printf("Enable vpss chn failed!\n");
+		HIAV_LOG(LOG_ERROR, "Enable vpss chn failed!");
 		goto END_VENC_CLASSIC_4;
 	}	
-	iRet = HI_VidVencStart(0, tVideo->emPayload, tVideo->emNorm, tVideo->emSize, tVideo->emRate, tVideo->m_iProfile);	
+	iRet = HI_VIDEO_VencStart(0, tVideo->emPayload, tVideo->emNorm, tVideo->emSize, tVideo->emRate, tVideo->m_iProfile);	
 	if (0 != iRet)
 	{
-		printf("Start Venc failed!\n");
+		HIAV_LOG(LOG_ERROR, "Start Venc failed!");
 		goto END_VENC_CLASSIC_5;
 	}
-	iRet = HI_VidVencBindVpss(0, 0, 0);
+	iRet = HI_VIDEO_VencBindVpss(0, 0, 0);
 	if (0 != iRet)
 	{
-		printf("Start Venc failed!\n");
+		HIAV_LOG(LOG_ERROR, "Start Venc failed!");
 		goto END_VENC_CLASSIC_5;
 	}	
 	
 	return 0;	
 	
 END_VENC_CLASSIC_5:
-	HI_VidVencUnBindVpss(0, 0, 0);
-	HI_VidVencStop(0);
-    HI_VidViUnBindVpss(tVideo->in_tViConfig.enViMode);
+	HI_VIDEO_VencUnBindVpss(0, 0, 0);
+	HI_VIDEO_VencStop(0);
+    HI_VIDEO_ViUnBindVpss(tVideo->in_tViConfig.enViMode);
 END_VENC_CLASSIC_4:	
-	HI_DevVpssDisableChn(0, 0);
+	HI_DEVICE_VpssDisableChn(0, 0);
 END_VENC_CLASSIC_3:    
-    HI_VidViUnBindVpss(tVideo->in_tViConfig.enViMode);
+    HI_VIDEO_ViUnBindVpss(tVideo->in_tViConfig.enViMode);
 END_VENC_CLASSIC_2:    
-    HI_DevVpssStopGroup(0);
+    HI_DEVICE_VpssStopGroup(0);
 END_VENC_CLASSIC_1:	
-    HI_VidStopVi(&tVideo->in_tViConfig);
+    HI_VIDEO_StopVi(&tVideo->in_tViConfig);
 	
 	return iRet;	
 }
 
-int HI3515E_VideoDeinit(void)
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3518E_VideoDisable(void)
 {
 	T_VideoInfo *tVideo = &g_tVideoInfo;
 	
-	HI_VidVencUnBindVpss(0, 0, 0);
-	HI_VidVencStop(0);
-	HI_DevVpssDisableChn(0, 0);
-    HI_VidViUnBindVpss(tVideo->in_tViConfig.enViMode);
-    HI_DevVpssStopGroup(0);
-    HI_VidStopVi(&tVideo->in_tViConfig);
+	HI_VIDEO_VencUnBindVpss(0, 0, 0);
+	HI_VIDEO_VencStop(0);
+	HI_DEVICE_VpssDisableChn(0, 0);
+    HI_VIDEO_ViUnBindVpss(tVideo->in_tViConfig.enViMode);
+    HI_DEVICE_VpssStopGroup(0);
+    HI_VIDEO_StopVi(&tVideo->in_tViConfig);
 	
 	return 0;	
 }
 
-int HI3515E_VideoSStart(HI_VIDEO_CBK _pVideo)
-{
-	T_VideoInfo *tVideo = &g_tVideoInfo;
-	int iRet = 0;
-	
-	if (tVideo->m_ucRunning)
-	{
-		return iRet;
-	}
-	else
-	{
-		tVideo->m_ucRunning = 1;
-	}	
-	
-	tVideo->pVideoCbk		= _pVideo;
-	
-	tVideo->m_iVfd = HI_MPI_VENC_GetFd(0);
-
-	if (efd != -1 && tVideo->m_iVfd != -1)
-	{
-		printf("++++ video_fd = %d\r\n", tVideo->m_iVfd);
-		uepoll_add(efd, tVideo->m_iVfd);
-	}
-
-	return iRet;
-}
-
-int HI3515E_VideoSStop(void)
-{
-	T_VideoInfo *tVideo = &g_tVideoInfo;
-	int iRet = 0;
-	
-	if (tVideo->m_ucRunning)
-	{
-		tVideo->m_ucRunning = 0;
-	}
-	else
-	{
-		return iRet;
-	}	
-	
-	if (efd != -1)
-	{
-		uepoll_del(efd, tVideo->m_iVfd);
-	}	
-
-	return iRet;
-}
-
-FILE *file = NULL;
-
-static int videoInputProcess(void)
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+static int videoInputProcess(void *_pThis)
 {
 	int iRet = 0, i;
-	T_VideoInfo *tVideo = &g_tVideoInfo;
+	T_VideoInfo *tVideo = (T_VideoInfo *)_pThis;
     VENC_CHN_STAT_S stStat;
     VENC_STREAM_S stStream;	
 	
@@ -437,13 +392,13 @@ static int videoInputProcess(void)
 	iRet = HI_MPI_VENC_Query(0, &stStat);
 	if (0 != iRet)
 	{
-		printf("HI_MPI_VENC_Query chn[%d] failed with %#x!\n", 0, iRet);
+		HIAV_LOG(LOG_ERROR, "HI_MPI_VENC_Query chn[%d] failed with %#x!", 0, iRet);
 		return iRet;
 	}	
 	
 	if(0 == stStat.u32CurPacks)
 	{
-	  printf("NOTE: Current  frame is NULL!\n");
+	  HIAV_LOG(LOG_ERROR, "NOTE: Current  frame is NULL!");
 	  return iRet;
 	}	
 	stStream.pstPack = (VENC_PACK_S*)malloc(sizeof(VENC_PACK_S) * stStat.u32CurPacks);
@@ -453,13 +408,13 @@ static int videoInputProcess(void)
 	{
 		free(stStream.pstPack);
 		stStream.pstPack = NULL;
-		printf("HI_MPI_VENC_GetStream failed with %#x!\n", iRet);
+		HIAV_LOG(LOG_ERROR, "HI_MPI_VENC_GetStream failed with %#x!", iRet);
 		goto EXIT;
 	}
 
 	//注意编码出来的是带海思头的
 	//printf("xxxx u32PackCount = %d\r\n", stStream.u32PackCount);
-	//HI_VidVencSaveStream(PT_H264, file, &stStream);
+	//HI_VIDEO_VencSaveStream(PT_H264, file, &stStream);
 	for (i=0; i<stStream.u32PackCount; i++)
 	{
 		if (stStream.pstPack[i].DataType.enH264EType == H264E_NALU_SEI)
@@ -480,56 +435,76 @@ EXIT:
 	return iRet;
 }
 
-
-
-
-
-
-/*********************************************************************************/
-static void *device_read_thread(void *arg)
-{	
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3515E_VideoSStart(HI_VIDEO_CBK _pVideo)
+{
 	T_VideoInfo *tVideo = &g_tVideoInfo;
-	struct epoll_event	events[EPOLL_EVENT_NUM_MAX];  	
-	int i,nfds, iRet;
-
-	//file = fopen("test.h264", "wb");
-	int fd = -1;
-	while(1)
+	int iRet = 0;
+	
+	if (tVideo->m_ucRunning)
 	{
-		nfds = epoll_wait(efd, events, EPOLL_EVENT_NUM_MAX, 0);  //1000ms
-		if (nfds <= 0)  
-		{
-			//超时
-			//printf("userial epoll_wait..\r\n");
-		}
-		else
-		{
-			for (i = 0; i < nfds; i++)  
-			{
-				fd = events[i].data.fd;
-				if (fd == audio_fd)
-				{
-					//音频采集处理
-					audioInputProcess();
-				}
-				else if (fd == tVideo->m_iVfd)
-				{
-					//视频采集处理
-					videoInputProcess();
-					
-				}
-			}
-		}
+		return iRet;
+	}
+	else
+	{
+		tVideo->m_ucRunning = 1;
+	}	
+	
+	tVideo->pVideoCbk		= _pVideo;
+	
+	tVideo->in_tEvent.m_emType		= EVENT_INLT;
+	tVideo->in_tEvent.m_iEventFD	= HI_MPI_VENC_GetFd(0);
+	tVideo->in_tEvent.m_Handle		= videoInputProcess;
+	
+	iRet = UranRegister(tVideo, pHiManger);	//pHiManger 不能为NULL
+	if (iRet)
+	{
+		HIAV_LOG(LOG_ERROR, "UranRegister error.");
 	}
 
-	printf("device read thread has exit~");
-	
-    return NULL;    
+	return iRet;
 }
 
+/*******************************************************************************
+* Name: 
+* Descriptions:
+* Parameter:	
+* Return:	
+* *****************************************************************************/
+int HI3515E_VideoSStop(void)
+{
+	T_VideoInfo *tVideo = &g_tVideoInfo;
+	int iRet = 0;
+	
+	if (tVideo->m_ucRunning)
+	{
+		tVideo->m_ucRunning = 0;
+	}
+	else
+	{
+		return iRet;
+	}	
+	
+	iRet = UranCancel(tVideo);	
+	if (iRet)
+	{
+		HIAV_LOG(LOG_ERROR, "UranCancel error.");
+	}
 
+	return iRet;
+}
 
-//初始化系统
+/*******************************************************************************
+* Name: 
+* Descriptions:初始化系统
+* Parameter:	
+* Return:	
+* *****************************************************************************/
 int HI3515E_DeviceInit(void)
 {
 	int iRet = 0;
@@ -552,53 +527,31 @@ int HI3515E_DeviceInit(void)
 	stVbConf.astCommPool[1].u32BlkCnt = 4;	
 	printf("Vb size = %d, Vb cnt = %d\r\n", stVbConf.astCommPool[0].u32BlkSize, 4);
 #endif		
-    iRet |= HI_DevSystemInit(&stVbConf);	
+    iRet = HI_DEVICE_SystemInit(&stVbConf);	
 	
-
-	
-	//2.创建主epoll
-	if (uepoll_create(&efd))
+	//创建管理实体
+	iRet = UranMangerCreate(MANGER_ROLE_SLAVE, 8, NULL, 0, &pHiManger);
+	if (iRet)
 	{
-		return -1;
+		//
+		HIAV_LOG(LOG_ERROR, "pHiManger create error.");
 	}
-
-	//创建线程
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-	
-	iRet = pthread_attr_setstacksize(&attr, 20*1024); //20K, 音频够用，视频估计不够
-	if(0 != iRet) 
-	{
-		iRet = pthread_attr_destroy(&attr);
-		printf("pthread_attr_setstacksize error");
-		return -1;
-	}
-
-	iRet = pthread_create(&thread_id, &attr, device_read_thread, NULL);
-	if(0 != iRet) 
-	{
-		iRet = pthread_attr_destroy(&attr);
-		printf("pthread_create failed!");
-		return -1;
-	}
-	
-	pthread_attr_destroy(&attr);
-	pthread_detach(thread_id);	
 
 	return iRet;
 }
 
 
-/*****************************************************************/
-
-/*****************************************************************/
+/******************************************************************************
+*测试代码
+******************************************************************************/
+FILE *file = NULL;
 
 int audio_data(char *p_data, int len)
 {
 	char audio_pt[320] = {0};
 
 	memcpy(audio_pt, p_data, 320);
-	hi3518_audio_output(audio_pt, NULL);
+	HI3515E_AudioPlayer(audio_pt, NULL);
 	
 	
 	return 0;
@@ -621,11 +574,14 @@ int video_data(int naltype, char *p_data, int len)
 int main()
 {
 	int iRet = 0;
+	//保存视频文件
+	file = fopen("test.h264", "wb");
+	
 	iRet = HI3515E_DeviceInit();
 	printf("device init %d\r\n", iRet);
-	HI3515E_VideoInit();
-	//iRet = hi3518_audio_init(0);	//不bind，可以使用bind模式来测试声音
-	//printf("audio init %d\r\n", iRet);
+	HI3518E_VideoEnable();
+	//iRet = HI3518E_AudioEnable(0);	//不bind，可以使用bind模式来测试声音
+	//printf("audio init %d.", iRet);
 	//HI3515E_AudioSStart(audio_data);
 	
 	

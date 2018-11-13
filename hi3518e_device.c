@@ -5,12 +5,12 @@
 	> Created Time: 
  ************************************************************************/
 #include "hi3518e_device.h"
+#include "hi3518e_debug.h"
 
 
 
 
-
-int HI_DevSystemInit(VB_CONF_S *pstVbConf)
+int HI_DEVICE_SystemInit(VB_CONF_S *pstVbConf)
 {
 	int ret = -1;
     HI_MPI_SYS_Exit();
@@ -18,21 +18,21 @@ int HI_DevSystemInit(VB_CONF_S *pstVbConf)
 
     if (NULL == pstVbConf)
     {
-        printf("input parameter is null, it is invaild!\n");
+        HIAV_LOG(LOG_ERROR, "input parameter is null, it is invaild!");
         return -1;
     }
 
     ret = HI_MPI_VB_SetConf(pstVbConf);
     if (0 != ret)
     {
-        printf("HI_MPI_VB_SetConf failed!\n");
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VB_SetConf failed!");
         return -1;
     }
 
     ret = HI_MPI_VB_Init();
     if (0 != ret)
     {
-        printf("HI_MPI_VB_Init failed!\n");
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VB_Init failed!");
         return -1;
     }
 	MPP_SYS_CONF_S stSysConf = {0};
@@ -40,14 +40,14 @@ int HI_DevSystemInit(VB_CONF_S *pstVbConf)
     ret = HI_MPI_SYS_SetConf(&stSysConf);
     if (0 != ret)
     {
-        printf("HI_MPI_SYS_SetConf failed\n");
+        HIAV_LOG(LOG_ERROR, "HI_MPI_SYS_SetConf failed");
         return -1;
     }
 
     ret = HI_MPI_SYS_Init();
     if (0 != ret)
     {
-        printf("HI_MPI_SYS_Init failed!\n");
+        HIAV_LOG(LOG_ERROR, "HI_MPI_SYS_Init failed!");
         return -1;
     }
 
@@ -55,14 +55,14 @@ int HI_DevSystemInit(VB_CONF_S *pstVbConf)
 }
 
 
-void HI_DevSystemExit(void)
+void HI_DEVICE_SystemExit(void)
 {
     HI_MPI_SYS_Exit();
     HI_MPI_VB_Exit();
     return;
 }
 
-int HI_DevSystemGetPicSize(VIDEO_NORM_E enNorm, PIC_SIZE_E enPicSize, SIZE_S *pstSize)
+int HI_DEVICE_GetPicSize(VIDEO_NORM_E enNorm, PIC_SIZE_E enPicSize, SIZE_S *pstSize)
 {
     switch (enPicSize)
     {
@@ -147,31 +147,30 @@ int HI_DevSystemGetPicSize(VIDEO_NORM_E enNorm, PIC_SIZE_E enPicSize, SIZE_S *ps
 
 
 
-int HI_DevSystemCalcPicVbBlkSize(VIDEO_NORM_E enNorm, PIC_SIZE_E enPicSize, PIXEL_FORMAT_E enPixFmt, int u32AlignWidth)
+int HI_DEVICE_CalcPicVbBlkSize(VIDEO_NORM_E enNorm, PIC_SIZE_E enPicSize, PIXEL_FORMAT_E enPixFmt, int u32AlignWidth)
 {
     int s32Ret = -1;
     SIZE_S stSize;
     int u32VbSize;
     int u32HeaderSize;
 
-    s32Ret = HI_DevSystemGetPicSize(enNorm, enPicSize, &stSize);
+    s32Ret = HI_DEVICE_GetPicSize(enNorm, enPicSize, &stSize);
     if (HI_SUCCESS != s32Ret)
     {
-        printf("get picture size[%d] failed!\n", enPicSize);
-            return -1;
+        HIAV_LOG(LOG_ERROR, "get picture size[%d] failed!", enPicSize);
+		return -1;
     }
 
     if (PIXEL_FORMAT_YUV_SEMIPLANAR_422 != enPixFmt && PIXEL_FORMAT_YUV_SEMIPLANAR_420 != enPixFmt)
     {
-        printf("pixel format[%d] input failed!\n", enPixFmt);
-            return -1;
+        HIAV_LOG(LOG_ERROR, "pixel format[%d] input failed!\n", enPixFmt);
+		return -1;
     }
 
     if (16!=u32AlignWidth && 32!=u32AlignWidth && 64!=u32AlignWidth)
     {
-        printf("system align width[%d] input failed!\n",\
-               u32AlignWidth);
-            return -1;
+        HIAV_LOG(LOG_ERROR, "system align width[%d] input failed!", u32AlignWidth);
+        return -1;
     }
     //printf("w:%d, u32AlignWidth:%d\n", CEILING_2_POWER(stSize.u32Width,u32AlignWidth), u32AlignWidth);
     u32VbSize = (CEILING_2_POWER(stSize.u32Width, u32AlignWidth) * \
@@ -186,7 +185,7 @@ int HI_DevSystemCalcPicVbBlkSize(VIDEO_NORM_E enNorm, PIC_SIZE_E enPicSize, PIXE
 
 /////////////////////////////////////////////////////////////////
 //ISP部分
-void HI_DevISPStop(void)
+void HI_DEVICE_ISPStop(void)
 {
 
     return;
@@ -196,11 +195,11 @@ void HI_DevISPStop(void)
 
 /////////////////////////////////////////////////////////////////
 //VPSS部分
-HI_S32 HI_DevVpssMemConfig(void)
+int HI_DEVICE_VpssMemConfig(void)
 {
     HI_CHAR * pcMmzName;
     MPP_CHN_S stMppChnVpss;
-    HI_S32 s32Ret, i;
+    int s32Ret, i;
 
     /*vpss group max is 64, not need config vpss chn.*/
     for(i=0;i<64;i++)
@@ -222,7 +221,7 @@ HI_S32 HI_DevVpssMemConfig(void)
         s32Ret = HI_MPI_SYS_SetMemConf(&stMppChnVpss, pcMmzName);
         if (HI_SUCCESS != s32Ret)
         {
-            printf("Vpss HI_MPI_SYS_SetMemConf ERR !\n");
+            HIAV_LOG(LOG_ERROR, "Vpss HI_MPI_SYS_SetMemConf ERR !");
             return -1;
         }
     }
@@ -230,27 +229,27 @@ HI_S32 HI_DevVpssMemConfig(void)
 }
 
 
-HI_S32 HI_DevVpssStartGroup(VPSS_GRP VpssGrp, VPSS_GRP_ATTR_S *pstVpssGrpAttr)
+int HI_DEVICE_VpssStartGroup(VPSS_GRP VpssGrp, VPSS_GRP_ATTR_S *pstVpssGrpAttr)
 {
-    HI_S32 s32Ret;
+    int s32Ret;
     VPSS_NR_PARAM_U unNrParam = {{0}};
     
     if (VpssGrp < 0 || VpssGrp > VPSS_MAX_GRP_NUM)
     {
-        printf("VpssGrp%d is out of rang. \n", VpssGrp);
+        HIAV_LOG(LOG_ERROR, "VpssGrp%d is out of rang.", VpssGrp);
         return -1;
     }
 
     if (HI_NULL == pstVpssGrpAttr)
     {
-        printf("null ptr,line%d. \n", __LINE__);
+        HIAV_LOG(LOG_ERROR, "null ptr,line%d.", __LINE__);
         return -1;
     }
 
     s32Ret = HI_MPI_VPSS_CreateGrp(VpssGrp, pstVpssGrpAttr);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("HI_MPI_VPSS_CreateGrp failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_CreateGrp failed with %#x!", s32Ret);
         return -1;
     }
 
@@ -258,7 +257,7 @@ HI_S32 HI_DevVpssStartGroup(VPSS_GRP VpssGrp, VPSS_GRP_ATTR_S *pstVpssGrpAttr)
     s32Ret = HI_MPI_VPSS_GetNRParam(VpssGrp, &unNrParam);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
         return -1;
     }
     
@@ -266,42 +265,42 @@ HI_S32 HI_DevVpssStartGroup(VPSS_GRP VpssGrp, VPSS_GRP_ATTR_S *pstVpssGrpAttr)
     s32Ret = HI_MPI_VPSS_SetNRParam(VpssGrp, &unNrParam);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("failed with %#x!\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
         return -1;
     }
 
     s32Ret = HI_MPI_VPSS_StartGrp(VpssGrp);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("HI_MPI_VPSS_StartGrp failed with %#x\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_StartGrp failed with %#x", s32Ret);
         return -1;
     }
 
     return HI_SUCCESS;
 }
 
-HI_S32 HI_DevVpssEnableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn, 
+int HI_DEVICE_VpssEnableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn, 
                                                   VPSS_CHN_ATTR_S *pstVpssChnAttr,
                                                   VPSS_CHN_MODE_S *pstVpssChnMode,
                                                   VPSS_EXT_CHN_ATTR_S *pstVpssExtChnAttr)
 {
-    HI_S32 s32Ret;
+    int s32Ret;
 
     if (VpssGrp < 0 || VpssGrp > VPSS_MAX_GRP_NUM)
     {
-        printf("VpssGrp%d is out of rang[0,%d]. \n", VpssGrp, VPSS_MAX_GRP_NUM);
+        HIAV_LOG(LOG_ERROR, "VpssGrp%d is out of rang[0,%d].", VpssGrp, VPSS_MAX_GRP_NUM);
         return -1;
     }
 
     if (VpssChn < 0 || VpssChn > VPSS_MAX_CHN_NUM)
     {
-        printf("VpssChn%d is out of rang[0,%d]. \n", VpssChn, VPSS_MAX_CHN_NUM);
+        HIAV_LOG(LOG_ERROR, "VpssChn%d is out of rang[0,%d].", VpssChn, VPSS_MAX_CHN_NUM);
         return -1;
     }
 
     if (HI_NULL == pstVpssChnAttr && HI_NULL == pstVpssExtChnAttr)
     {
-        printf("null ptr,line%d. \n", __LINE__);
+        HIAV_LOG(LOG_ERROR, "null ptr,line%d.", __LINE__);
         return -1;
     }
 
@@ -310,7 +309,7 @@ HI_S32 HI_DevVpssEnableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn,
         s32Ret = HI_MPI_VPSS_SetChnAttr(VpssGrp, VpssChn, pstVpssChnAttr);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("HI_MPI_VPSS_SetChnAttr failed with %#x\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_SetChnAttr failed with %#x", s32Ret);
             return -1;
         }
     }
@@ -319,7 +318,7 @@ HI_S32 HI_DevVpssEnableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn,
         s32Ret = HI_MPI_VPSS_SetExtChnAttr(VpssGrp, VpssChn, pstVpssExtChnAttr);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("%s failed with %#x\n", __FUNCTION__, s32Ret);
+            HIAV_LOG(LOG_ERROR, "%s failed with %#x", __FUNCTION__, s32Ret);
             return -1;
         }
     }
@@ -329,7 +328,7 @@ HI_S32 HI_DevVpssEnableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn,
         s32Ret = HI_MPI_VPSS_SetChnMode(VpssGrp, VpssChn, pstVpssChnMode);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("%s failed with %#x\n", __FUNCTION__, s32Ret);
+            HIAV_LOG(LOG_ERROR, "%s failed with %#x", __FUNCTION__, s32Ret);
             return -1;
         }     
     }
@@ -337,75 +336,75 @@ HI_S32 HI_DevVpssEnableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn,
     s32Ret = HI_MPI_VPSS_EnableChn(VpssGrp, VpssChn);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("HI_MPI_VPSS_EnableChn failed with %#x\n", s32Ret);
+        HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_EnableChn failed with %#x", s32Ret);
         return -1;
     }
 
     return HI_SUCCESS;
 }
 
-HI_S32 HI_DevVpssStopGroup(VPSS_GRP VpssGrp)
+int HI_DEVICE_VpssStopGroup(VPSS_GRP VpssGrp)
 {
-    HI_S32 s32Ret;
+    int s32Ret;
 
     if (VpssGrp < 0 || VpssGrp > VPSS_MAX_GRP_NUM)
     {
-        printf("VpssGrp%d is out of rang[0,%d]. \n", VpssGrp, VPSS_MAX_GRP_NUM);
+        HIAV_LOG(LOG_ERROR, "VpssGrp%d is out of rang[0,%d].", VpssGrp, VPSS_MAX_GRP_NUM);
         return -1;
     }
 
     s32Ret = HI_MPI_VPSS_StopGrp(VpssGrp);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("%s failed with %#x\n", __FUNCTION__, s32Ret);
+        HIAV_LOG(LOG_ERROR, "%s failed with %#x", __FUNCTION__, s32Ret);
         return -1;
     }
 
     s32Ret = HI_MPI_VPSS_DestroyGrp(VpssGrp);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("%s failed with %#x\n", __FUNCTION__, s32Ret);
+        HIAV_LOG(LOG_ERROR, "%s failed with %#x", __FUNCTION__, s32Ret);
         return -1;
     }
 
     return HI_SUCCESS;
 }
 
-HI_S32 HI_DevVpssDisableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn)
+int HI_DEVICE_VpssDisableChn(VPSS_GRP VpssGrp, VPSS_CHN VpssChn)
 {
-    HI_S32 s32Ret;
+    int s32Ret;
 
     if (VpssGrp < 0 || VpssGrp > VPSS_MAX_GRP_NUM)
     {
-        printf("VpssGrp%d is out of rang[0,%d]. \n", VpssGrp, VPSS_MAX_GRP_NUM);
+        HIAV_LOG(LOG_ERROR, "VpssGrp%d is out of rang[0,%d].", VpssGrp, VPSS_MAX_GRP_NUM);
         return -1;
     }
 
     if (VpssChn < 0 || VpssChn > VPSS_MAX_CHN_NUM)
     {
-        printf("VpssChn%d is out of rang[0,%d]. \n", VpssChn, VPSS_MAX_CHN_NUM);
+        HIAV_LOG(LOG_ERROR, "VpssChn%d is out of rang[0,%d].", VpssChn, VPSS_MAX_CHN_NUM);
         return -1;
     }
     
     s32Ret = HI_MPI_VPSS_DisableChn(VpssGrp, VpssChn);
     if (s32Ret != HI_SUCCESS)
     {
-        printf("%s failed with %#x\n", __FUNCTION__, s32Ret);
+        HIAV_LOG(LOG_ERROR, "%s failed with %#x", __FUNCTION__, s32Ret);
         return -1;
     }
 
     return HI_SUCCESS;
 }
 
-HI_S32 HI_DevVpssStart(HI_S32 s32GrpCnt, SIZE_S *pstSize, HI_S32 s32ChnCnt,VPSS_GRP_ATTR_S *pstVpssGrpAttr)
+int HI_DEVICE_VpssStart(int s32GrpCnt, SIZE_S *pstSize, int s32ChnCnt,VPSS_GRP_ATTR_S *pstVpssGrpAttr)
 {
     VPSS_GRP VpssGrp;
     VPSS_CHN VpssChn;
     VPSS_GRP_ATTR_S stGrpAttr = {0};
     VPSS_CHN_ATTR_S stChnAttr = {0};
     VPSS_NR_PARAM_U unNrParam = {{0}};
-    HI_S32 s32Ret;
-    HI_S32 i, j;
+    int s32Ret;
+    int i, j;
 
     /*** Set Vpss Grp Attr ***/
 
@@ -432,7 +431,7 @@ HI_S32 HI_DevVpssStart(HI_S32 s32GrpCnt, SIZE_S *pstSize, HI_S32 s32ChnCnt,VPSS_
         s32Ret = HI_MPI_VPSS_CreateGrp(VpssGrp, &stGrpAttr);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("HI_MPI_VPSS_CreateGrp failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_CreateGrp failed with %#x!", s32Ret);
             return -1;
         }
 
@@ -440,14 +439,14 @@ HI_S32 HI_DevVpssStart(HI_S32 s32GrpCnt, SIZE_S *pstSize, HI_S32 s32ChnCnt,VPSS_
         s32Ret = HI_MPI_VPSS_GetNRParam(VpssGrp, &unNrParam);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
             return -1;
         }        
         
         s32Ret = HI_MPI_VPSS_SetNRParam(VpssGrp, &unNrParam);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
             return -1;
         }
 
@@ -467,14 +466,14 @@ HI_S32 HI_DevVpssStart(HI_S32 s32GrpCnt, SIZE_S *pstSize, HI_S32 s32ChnCnt,VPSS_
             s32Ret = HI_MPI_VPSS_SetChnAttr(VpssGrp, VpssChn, &stChnAttr);
             if (s32Ret != HI_SUCCESS)
             {
-                printf("HI_MPI_VPSS_SetChnAttr failed with %#x\n", s32Ret);
+                HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_SetChnAttr failed with %#x", s32Ret);
                 return -1;
             }
     
             s32Ret = HI_MPI_VPSS_EnableChn(VpssGrp, VpssChn);
             if (s32Ret != HI_SUCCESS)
             {
-                printf("HI_MPI_VPSS_EnableChn failed with %#x\n", s32Ret);
+                HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_EnableChn failed with %#x", s32Ret);
                 return -1;
             }
         }
@@ -483,7 +482,7 @@ HI_S32 HI_DevVpssStart(HI_S32 s32GrpCnt, SIZE_S *pstSize, HI_S32 s32ChnCnt,VPSS_
         s32Ret = HI_MPI_VPSS_StartGrp(VpssGrp);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("HI_MPI_VPSS_StartGrp failed with %#x\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "HI_MPI_VPSS_StartGrp failed with %#x", s32Ret);
             return -1;
         }
 
@@ -491,10 +490,10 @@ HI_S32 HI_DevVpssStart(HI_S32 s32GrpCnt, SIZE_S *pstSize, HI_S32 s32ChnCnt,VPSS_
     return HI_SUCCESS;
 }
 
-HI_S32 HI_DevVpssStop(HI_S32 s32GrpCnt, HI_S32 s32ChnCnt)
+int HI_DEVICE_VpssStop(int s32GrpCnt, int s32ChnCnt)
 {
-    HI_S32 i, j;
-    HI_S32 s32Ret = HI_SUCCESS;
+    int i, j;
+    int s32Ret = HI_SUCCESS;
     VPSS_GRP VpssGrp;
     VPSS_CHN VpssChn;
 
@@ -504,7 +503,7 @@ HI_S32 HI_DevVpssStop(HI_S32 s32GrpCnt, HI_S32 s32ChnCnt)
         s32Ret = HI_MPI_VPSS_StopGrp(VpssGrp);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
             return -1;
         }
         for(j=0; j<s32ChnCnt; j++)
@@ -513,7 +512,7 @@ HI_S32 HI_DevVpssStop(HI_S32 s32GrpCnt, HI_S32 s32ChnCnt)
             s32Ret = HI_MPI_VPSS_DisableChn(VpssGrp, VpssChn);
             if (s32Ret != HI_SUCCESS)
             {
-                printf("failed with %#x!\n", s32Ret);
+                HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
                 return -1;
             }
         }
@@ -521,7 +520,7 @@ HI_S32 HI_DevVpssStop(HI_S32 s32GrpCnt, HI_S32 s32ChnCnt)
         s32Ret = HI_MPI_VPSS_DestroyGrp(VpssGrp);
         if (s32Ret != HI_SUCCESS)
         {
-            printf("failed with %#x!\n", s32Ret);
+            HIAV_LOG(LOG_ERROR, "failed with %#x!", s32Ret);
             return -1;
         }
     }
